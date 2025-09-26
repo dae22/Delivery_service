@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 from fastapi import Query
 from pydantic import BaseModel, field_validator
 

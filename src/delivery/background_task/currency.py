@@ -1,42 +1,43 @@
-import httpx
+import requests
 from sqlalchemy import select
 
-import delivery.redis_client as redis_module
-from delivery.database import async_session
+from delivery.background_task.celery import celery
+from delivery.background_task.databace_sync import sync_session
+from delivery.background_task.redis_client import redis_client
 from delivery.logger import logger
 from delivery.models import PackagesDB
 
 url = "https://www.cbr-xml-daily.ru/daily_json.js"
 
 
-async def get_usd_rate():
-    rate = await redis_module.redis_client.get("usd_rate")
+def get_usd_rate():
+    rate = redis_client.get("usd_rate")
     if not rate:
         logger.warning("Exchange rate is missing in Redis")
-        return await update_usd_rate()
+        return update_usd_rate()
     return float(rate)
 
 
-async def update_usd_rate():
+@celery.task
+def update_usd_rate():
     logger.info("Start update of exchange rate")
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        data = response.json()
+    response = requests.get(url)
+    data = response.json()
 
     rate = data["Valute"]["USD"]["Value"]
-    await redis_module.redis_client.set("usd_rate", rate, ex=24 * 3600)
+    redis_client.set("usd_rate", rate, ex=24 * 3600)
     logger.info("Exchange rate updated in Redis")
     return float(rate)
 
 
-async def calculate_delivery_prices():
+@celery.task
+def calculate_delivery_prices():
     logger.info("Start calc func")
-    usd_rate = await get_usd_rate()
+    usd_rate = get_usd_rate()
     logger.info("USD rates received")
 
-    async with async_session() as session:
-        result = await session.execute(select(PackagesDB).where(PackagesDB.delivery_price.is_(None)))
+    with sync_session() as session:
+        result = session.execute(select(PackagesDB).where(PackagesDB.delivery_price.is_(None)))
         packages = result.scalars().all()
 
         if not packages:
@@ -46,5 +47,5 @@ async def calculate_delivery_prices():
         for pkg in packages:
             pkg.delivery_price = (pkg.weight * 0.5 + pkg.price * 0.01) * usd_rate
 
-        await session.commit()
+        session.commit()
         logger.info("Delivery price calculated")

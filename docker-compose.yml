@@ -8,24 +8,42 @@ services:
     ports:
       - "5430:5432"
     volumes:
-      - ./pgdata:/var/lib/postgres/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres -d delivery_db" ]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
+
   redis:
     image: redis:8.2.1
     container_name: delivery_redis
-    restart: unless-stopped
-    volumes:
-      - rdata:/data
     ports:
       - "6379:6379"
+
+  celery_worker:
+    build: .
+    container_name: delivery_worker
+    command: celery -A delivery.background_task.celery.celery worker -P solo
+    volumes:
+      - .:/app
+    depends_on:
+      - app
+
+  celery_beat:
+    build: .
+    container_name: delivery_beat
+    command: celery -A delivery.background_task.celery.celery beat
+    volumes:
+      - .:/app
+    depends_on:
+      - app
+
   app:
     build: .
     container_name: delivery_app
+    command: sh -c "alembic upgrade head && uvicorn src.delivery.main:app --host 0.0.0.0 --port 8000"
     volumes:
       - .:/app
     ports:
@@ -36,8 +54,6 @@ services:
       redis:
         condition: service_started
 
+
 volumes:
   pgdata:
-    driver: local
-  rdata:
-    driver: local
