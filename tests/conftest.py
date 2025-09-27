@@ -15,7 +15,7 @@ from delivery.main import app as fastapi_app
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DB_URL_TEST")
+DB_URL_TEST = os.getenv("DB_URL_TEST")
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
@@ -29,12 +29,12 @@ def event_loop():
 @pytest.fixture(scope="session")
 def alembic_config():
     cfg = Config(str(PROJECT_ROOT / "alembic.ini"))
-    cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+    cfg.set_main_option("sqlalchemy.url", DB_URL_TEST)
     return cfg
 
 
-@pytest_asyncio.fixture(scope="session")
-async def migrations(alembic_config):
+@pytest.fixture(scope="session")
+def migrations(alembic_config):
     command.upgrade(alembic_config, "head")
     yield
     # подумать про очистку БД здесь
@@ -42,7 +42,7 @@ async def migrations(alembic_config):
 
 @pytest_asyncio.fixture(scope="session")
 async def engine(migrations):
-    engine = create_async_engine(DATABASE_URL, future=True)
+    engine = create_async_engine(DB_URL_TEST, future=True)
     try:
         yield engine
     finally:
@@ -57,11 +57,11 @@ async def db_session(engine):
 
 
 @pytest_asyncio.fixture
-async def client(db_session, monkeypatch):
+async def test_client(db_session, monkeypatch):
     async def override_get_db():
         yield db_session
 
-    monkeypatch.setattr(database, "get_db", override_get_db)
+    fastapi_app.dependency_overrides[database.get_db] = override_get_db
 
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
