@@ -5,18 +5,18 @@ import pathlib
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from alembic import command
 from alembic.config import Config
 from delivery import database
-from delivery.main import app
+from delivery.main import app as fastapi_app
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DB_URL_TEST")
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="session")
@@ -63,7 +63,8 @@ async def client(db_session, monkeypatch):
 
     monkeypatch.setattr(database, "get_db", override_get_db)
 
-    async with AsyncClient(app=app, base_url="http://testserver") as client:
+    transport = ASGITransport(app=fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client
 
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()

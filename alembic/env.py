@@ -82,4 +82,12 @@ def do_run_migrations(connection: Connection) -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(run_migrations_online_async())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        asyncio.get_event_loop().create_task(run_migrations_online_async())
+    else:
+        asyncio.run(run_migrations_online_async())
