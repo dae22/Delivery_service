@@ -32,7 +32,7 @@ httpx = "^0.28.1"
 pytest-asyncio = "^1.2.0"
 
 [tool.ruff]
-lint.select = ["E", "F", "W", "DJ", "I", "UP"]
+lint.select = ["E", "F", "W", "I", "UP"]
 lint.ignore = ["F401"]
 line-length = 120
 
